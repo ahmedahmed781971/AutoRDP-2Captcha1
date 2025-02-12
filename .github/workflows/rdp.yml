@@ -1,4 +1,4 @@
-name: AutoRDP-2Captcha
+name: Fixed-AutoRDP
 
 on:
   workflow_dispatch:
@@ -10,50 +10,29 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Setup RDP & Playit
+    - name: Setup RDP
       run: |
-        # تثبيت Playit
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        
-        # تفعيل Remote Desktop
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "YourStrongPasswordHere123!" -Force)
+        netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "P@ssw0rd!123" -Force)
 
-        # تشغيل Playit مع السر
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
-
-    - name: Install Node.js
+    - name: Install Playit
       run: |
-        Invoke-WebRequest -Uri "https://nodejs.org/dist/v18.17.1/node-v18.17.1-x64.msi" -OutFile "$env:USERPROFILE\nodejs.msi"
-        Start-Process msiexec.exe -ArgumentList "/i $env:USERPROFILE\nodejs.msi /quiet" -Wait
+        Invoke-WebRequest -Uri "https://playit.gg/downloads/playit-windows-64-bit" -OutFile playit.exe
+        Start-Process .\playit.exe -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
 
     - name: Setup 2Captcha
       run: |
-        @"
-        const twoCaptcha = require('2captcha');
-        const solver = new twoCaptcha.Solver('8ce5dcfef586a13706557deebafd2e7f');
-
-        setInterval(async () => {
-          try {
-            const balance = await solver.getBalance();
-            console.log(\`الرصيد الحالي: $\{balance}\`);
-            
-            // حل 5 كابتشا كل 30 ثانية (تجنب الحظر)
-            for(let i = 0; i < 5; i++) {
-              solver.hcaptcha('SITE_KEY_HERE', 'https://target-website.com')
-                .then(res => console.log(\`تم حل الكابتشا: $\{res}\`))
-                .catch(err => console.error(\`خطأ: $\{err}\`));
-            }
-          } catch (err) {
-            console.error(err);
-          }
-        }, 30000); // كل 30 ثانية
-        "@ | Out-File -FilePath "$env:USERPROFILE\captcha.js" -Encoding utf8
-
         npm install 2captcha
-        Start-Process "node" -ArgumentList "$env:USERPROFILE\captcha.js" -WindowStyle Hidden
+        @"
+        const solver = new (require('2captcha'))('8ce5dcfef586a13706557deebafd2e7f');
+        setInterval(() => {
+          solver.hcaptcha('SITE_KEY', 'https://example.com')
+            .then(console.log)
+            .catch(console.error)
+        }, 5000);
+        "@ > captcha.js
+        Start-Process node -ArgumentList "captcha.js" -WindowStyle Hidden
 
     - name: Keep Alive
-      run: Start-Sleep -Seconds 21600
+      run: ping -t 127.0.0.1
